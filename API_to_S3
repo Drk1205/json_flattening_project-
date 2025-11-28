@@ -74,4 +74,97 @@ def lambda_handler(event, context):
             "body": f"Error: {str(e)}"
         }
 
+//1.Create S3 Bucket 
+//2.create AWS  lambda function 
+//3.attach role to lambda function 
+//4.write the python code 
+
+
+Create database db_api2;
+Use  database db_api2;
+Create schema file_format2;
+use schema file_format2;
+Create or replace file format db_api2.file_format2.json
+type=json;
+
+//arn:aws:iam::382742775870:role/api_to_snowflake
+create or replace storage integration my_s3_integration2 type=External_Stage storage_provider=S3 enabled=true storage_aws_role_arn='arn:aws:iam::382742775870:role/api_to_snowflake' storage_allowed_locations=('s3://s3api-call/job/')
+
+desc storage integration my_s3_integration2;
+DESC STORAGE INTEGRATION my_s3_integration2;
+
+create or replace stage db_api2.file_format2.stage
+url='s3://s3api-call/job/'
+storage_integration=my_s3_integration2
+file_format=db_api2.file_format2.json
+
+create or replace table raw (
+
+raw variant
+
+);
+
+
+create or replace pipe api_pipe
+auto_ingest=True
+as 
+copy into raw
+from @db_api2.file_format2.stage;
+
+desc pipe api_pipe;
+truncate  table raw;
+
+list @db_api2.file_format2.stage;list 
+//arn:aws:sqs:ap-southeast-2:501235162090:sf-snowpipe-AIDAXJM7RTPVJIAI7EYBJ-NsZnJxQze5RXFyOw2xQdeQ
+//Storage_aws_external_id= OI36200_SFCRole=5_qgICc3vTDhOUCK4x0F/LI6RrAXw=  
+//STORAGE_AWS_ROLE_ARN= arn:aws:iam::382742775870:role/api_to_snowflake
+--Storage_aws_iam_user_arn = arn:aws:iam::501235162090:user/sxd81000-s
+//STORAGE_ALLOWED_LOCATIONS=s3://s3api-call/job/
+select * from raw
+limit 1;
+
+SELECT COUNT(*) FROM raw;
+
+select * from raw;
+create or replace table flatten_data
+(
+company_name     STRING,
+  created_at       TIMESTAMP,
+  deszzcription_clean STRING,
+  job_type_1       STRING,
+  job_type_2       STRING,
+  job_type_3       STRING,
+  location         STRING,
+  is_remote        BOOLEAN,
+  slug             STRING,
+  title            STRING,
+  tag_1            STRING,
+  tag_2            STRING,
+  tag_3            STRING,
+  url              STRING
+);
+select * from flatten_data
+
+INSERT INTO flatten_data
+SELECT
+  job.value:company_name::STRING AS company_name,
+  TO_TIMESTAMP(job.value:created_at::NUMBER) AS created_at,
+  REGEXP_REPLACE(COALESCE(job.value:description::STRING, ''), '<[^>]+>', '', 1, 0, 'c') AS description_clean,
+  job.value:job_types[0]::STRING AS job_type_1,
+  job.value:job_types[1]::STRING AS job_type_2,
+  job.value:job_types[2]::STRING AS job_type_3,
+  job.value:location::STRING     AS location,
+  job.value:remote::BOOLEAN      AS is_remote,
+  job.value:slug::STRING         AS slug,
+  job.value:title::STRING        AS title,
+  job.value:tags[0]::STRING      AS tag_1,
+  job.value:tags[1]::STRING      AS tag_2,
+  job.value:tags[2]::STRING      AS tag_3,
+  job.value:url::STRING          AS url
+FROM raw,
+LATERAL FLATTEN(INPUT => raw) AS job;
+Select * from flatten_data;
+
+-- list files visible to Snowflake in the stage
+LIST @db_api2.file_format2.stage;
 
